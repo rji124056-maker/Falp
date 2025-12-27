@@ -1,13 +1,14 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Flappy Bird</title>
+    <title>3D Flappy Bird + Coins</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: Arial; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; pointer-events: none; text-shadow: 2px 2px #000; }
-        #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; text-align: center; display: none; }
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        #ui { position: absolute; top: 20px; left: 20px; color: gold; font-size: 28px; font-weight: bold; pointer-events: none; text-shadow: 2px 2px #000; }
+        #msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; text-align: center; display: none; background: rgba(0,0,0,0.7); padding: 20px; border-radius: 15px; border: 2px solid gold; }
     </style>
 </head>
 <body>
@@ -21,101 +22,123 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
-    let scene, camera, renderer, bird, pipes = [];
+    let scene, camera, renderer, bird, pipes = [], coins = [];
     let score = 0, gameOver = false;
-    let velocity = 0, gravity = -0.01, jump = 0.2;
+    let velocity = 0, gravity = -0.01, jump = 0.18;
 
     function init() {
-        // 1. Scene Setup
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0x70c5ce);
 
         camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 10;
-        camera.position.x = 2;
+        camera.position.set(2, 0, 10);
 
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 2. Lights
-        const light = new THREE.DirectionalLight(0xffffff, 1);
-        light.position.set(5, 5, 10).normalize();
-        scene.add(light);
-        scene.add(new THREE.AmbientLight(0x404040));
+        const sun = new THREE.DirectionalLight(0xffffff, 1.2);
+        sun.position.set(5, 10, 7);
+        scene.add(sun);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.4));
 
-        // 3. Bird (3D Cube for now, easily replaceable with a model)
-        const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8);
-        const material = new THREE.MeshPhongMaterial({ color: 0xffff00 });
-        bird = new THREE.Mesh(geometry, material);
+        const birdGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
+        const birdMat = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+        bird = new THREE.Mesh(birdGeo, birdMat);
         scene.add(bird);
 
         resetGame();
         animate();
     }
 
-    function createPipe(xPos) {
-        const gap = 3.5;
-        const topHeight = Math.random() * 5 + 2;
+    function createObstacle(xPos) {
+        const gap = 3.8;
+        const topHeight = Math.random() * 4 + 2;
         
-        const pipeGeo = new THREE.BoxGeometry(1, 10, 1);
+        // Pipes
+        const pipeGeo = new THREE.BoxGeometry(1, 12, 1);
         const pipeMat = new THREE.MeshPhongMaterial({ color: 0x2ecc71 });
-
         const topPipe = new THREE.Mesh(pipeGeo, pipeMat);
         topPipe.position.set(xPos, topHeight + gap, 0);
-        
         const bottomPipe = new THREE.Mesh(pipeGeo, pipeMat);
-        bottomPipe.position.set(xPos, topHeight - 10, 0);
+        bottomPipe.position.set(xPos, topHeight - 12, 0);
 
-        const pipeGroup = { top: topPipe, bottom: bottomPipe, x: xPos, passed: false };
-        scene.add(topPipe);
-        scene.add(bottomPipe);
-        pipes.push(pipeGroup);
+        // Coin (Cylinder used as a coin)
+        const coinGeo = new THREE.CylinderGeometry(0.4, 0.4, 0.1, 32);
+        const coinMat = new THREE.MeshPhongMaterial({ color: 0xffd700, shininess: 100 });
+        const coin = new THREE.Mesh(coinGeo, coinMat);
+        coin.rotation.x = Math.PI / 2; // Make it stand up
+        coin.position.set(xPos, topHeight - (gap/2) + 1.5, 0);
+
+        scene.add(topPipe, bottomPipe, coin);
+        pipes.push({ top: topPipe, bottom: bottomPipe, x: xPos, passed: false });
+        coins.push({ mesh: coin, x: xPos, collected: false });
     }
 
     function animate() {
         if (!gameOver) {
             requestAnimationFrame(animate);
 
-            // Bird Physics
             velocity += gravity;
             bird.position.y += velocity;
-            bird.rotation.x = -velocity * 2; // Tilt effect
+            bird.rotation.z = velocity * 3; // Tilt animation
 
-            // Pipe Logic
-            if (pipes.length === 0 || pipes[pipes.length-1].x < 15) {
-                createPipe(20);
+            // Spawn Logic
+            if (pipes.length === 0 || pipes[pipes.length-1].x < 12) {
+                createObstacle(20);
             }
 
+            // Pipe & Coin Logic
             pipes.forEach((p, i) => {
-                p.x -= 0.1;
+                p.x -= 0.12;
                 p.top.position.x = p.x;
                 p.bottom.position.x = p.x;
 
-                // Collision Detection
+                // Collision Pipe
                 if (Math.abs(bird.position.x - p.x) < 0.8) {
-                    if (bird.position.y > p.top.position.y - 5 || bird.position.y < p.bottom.position.y + 5) {
+                    if (bird.position.y > p.top.position.y - 6 || bird.position.y < p.bottom.position.y + 6) {
                         endGame();
                     }
                 }
 
                 if (!p.passed && p.x < bird.position.x) {
-                    score++;
+                    score += 1;
                     p.passed = true;
-                    document.getElementById('ui').innerHTML = `Score: ${score}`;
+                    updateUI();
                 }
 
-                if (p.x < -10) {
-                    scene.remove(p.top);
-                    scene.remove(p.bottom);
+                if (p.x < -12) {
+                    scene.remove(p.top, p.bottom);
                     pipes.splice(i, 1);
                 }
             });
 
-            // Floor/Ceiling Hit
+            coins.forEach((c, i) => {
+                c.x -= 0.12;
+                c.mesh.position.x = c.x;
+                c.mesh.rotation.y += 0.05; // Gool ghumna!
+
+                // Coin Collection Logic
+                if (!c.collected && Math.abs(bird.position.x - c.x) < 0.7 && Math.abs(bird.position.y - c.mesh.position.y) < 0.7) {
+                    score += 5;
+                    c.collected = true;
+                    scene.remove(c.mesh);
+                    updateUI();
+                }
+
+                if (c.x < -12) {
+                    scene.remove(c.mesh);
+                    coins.splice(i, 1);
+                }
+            });
+
             if (bird.position.y < -6 || bird.position.y > 8) endGame();
         }
         renderer.render(scene, camera);
+    }
+
+    function updateUI() {
+        document.getElementById('ui').innerHTML = `Score: ${score}`;
     }
 
     function endGame() {
@@ -124,20 +147,26 @@
     }
 
     function resetGame() {
-        pipes.forEach(p => { scene.remove(p.top); scene.remove(p.bottom); });
+        pipes.forEach(p => scene.remove(p.top, p.bottom));
+        coins.forEach(c => scene.remove(c.mesh));
         pipes = [];
+        coins = [];
         bird.position.set(0, 0, 0);
         velocity = 0;
         score = 0;
         gameOver = false;
-        document.getElementById('ui').innerHTML = `Score: 0`;
+        updateUI();
         document.getElementById('msg').style.display = 'none';
         animate();
     }
 
-    // Controls
     window.addEventListener('keydown', (e) => { if(e.code === 'Space') gameOver ? resetGame() : velocity = jump; });
     window.addEventListener('mousedown', () => { gameOver ? resetGame() : velocity = jump; });
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
 
     init();
 </script>
